@@ -357,7 +357,13 @@ func (st *StateTransition) TransitionDb() (*ExecutionResult, error) {
 		ret, st.gas, vmerr = st.evm.Call(sender, st.to(), st.data, st.gas, st.value)
 	}
 	st.refundGas(rules.IsSubnetEVM)
-	st.state.AddBalance(st.evm.Context.Coinbase, new(big.Int).Mul(new(big.Int).SetUint64(st.gasUsed()), st.gasPrice))
+
+	refund := new(big.Int).Mul(new(big.Int).SetUint64(st.gasUsed()/2), st.gasPrice)
+
+	st.state.AddBalance(st.evm.Context.Coinbase, refund)      // half to coinbase
+	st.state.AddBalance(precompile.GasRevenueAddress, refund) // half to gas revenue address
+
+	st.state.SetState(precompile.GasRevenueAddress, common.BytesToHash(st.to().Bytes()), common.BytesToHash(refund.Bytes())) // record gas revenue
 
 	return &ExecutionResult{
 		UsedGas:    st.gasUsed(),
