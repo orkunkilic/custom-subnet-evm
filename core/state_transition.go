@@ -356,14 +356,43 @@ func (st *StateTransition) TransitionDb() (*ExecutionResult, error) {
 		st.state.SetNonce(msg.From(), st.state.GetNonce(sender.Address())+1)
 		ret, st.gas, vmerr = st.evm.Call(sender, st.to(), st.data, st.gas, st.value)
 	}
+
+	// FIXME: not sure what to do with this
 	st.refundGas(rules.IsSubnetEVM)
 
-	refund := new(big.Int).Mul(new(big.Int).SetUint64(st.gasUsed()/2), st.gasPrice)
+	isRegistered := st.state.GetState(
+		precompile.GasRevenueAddress,
+		common.BytesToHash(append([]byte("isRegistered"), st.to().Bytes()...)),
+	)
 
-	st.state.AddBalance(st.evm.Context.Coinbase, refund)      // half to coinbase
-	st.state.AddBalance(precompile.GasRevenueAddress, refund) // half to gas revenue address
+	if isRegistered.Big().Cmp(big.NewInt(0)) != 0 {
+		// not registered
+		st.state.AddBalance(st.evm.Context.Coinbase, new(big.Int).Mul(new(big.Int).SetUint64(st.gasUsed()), st.gasPrice))
+	} else {
+		// registered
+		half := new(big.Int).Mul(new(big.Int).SetUint64(st.gasUsed()/2), st.gasPrice)
 
-	st.state.SetState(precompile.GasRevenueAddress, common.BytesToHash(st.to().Bytes()), common.BytesToHash(refund.Bytes())) // record gas revenue
+		st.state.AddBalance(st.evm.Context.Coinbase, half)      // half to coinbase
+		st.state.AddBalance(precompile.GasRevenueAddress, half) // half to gas revenue address
+
+		// get pre-balance
+		balance := st.state.GetState(
+			precompile.GasRevenueAddress,
+			common.BytesToHash(append([]byte("balanceOf"), st.to().Bytes()...)),
+		)
+
+		// record total gas revenue
+		st.state.SetState(
+			precompile.GasRevenueAddress,
+			common.BytesToHash(append([]byte("balanceOf"), st.to().Bytes()...)),
+			common.BytesToHash(
+				new(big.Int).Add(
+					balance.Big(),
+					half,
+				).Bytes(),
+			),
+		)
+	}
 
 	return &ExecutionResult{
 		UsedGas:    st.gasUsed(),

@@ -39,11 +39,13 @@ import (
 )
 
 const (
-	BalanceOfGasCost uint64 = 0      // SET A GAS COST HERE
-	WithdrawGasCost  uint64 = 50_000 // SET A GAS COST HERE
+	BalanceOfGasCost    uint64 = 10_000 // SET A GAS COST HERE
+	IsRegisteredGasCost uint64 = 10_000 // SET A GAS COST HERE
+	RegisterGasCost     uint64 = 30_000 // SET A GAS COST HERE
+	WithdrawGasCost     uint64 = 30_000 // SET A GAS COST HERE
 
 	// GasRevenueRawABI contains the raw ABI of GasRevenue contract.
-	GasRevenueRawABI = "[{\"inputs\":[{\"internalType\":\"address\",\"name\":\"contractAddress\",\"type\":\"address\"}],\"name\":\"balanceOf\",\"outputs\":[{\"internalType\":\"uint256\",\"name\":\"balance\",\"type\":\"uint256\"}],\"stateMutability\":\"view\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"address\",\"name\":\"contractAddress\",\"type\":\"address\"}],\"name\":\"withdraw\",\"outputs\":[],\"stateMutability\":\"nonpayable\",\"type\":\"function\"}]"
+	GasRevenueRawABI = "[{\"inputs\":[{\"internalType\":\"address\",\"name\":\"contractAddress\",\"type\":\"address\"}],\"name\":\"balanceOf\",\"outputs\":[{\"internalType\":\"uint256\",\"name\":\"balance\",\"type\":\"uint256\"}],\"stateMutability\":\"view\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"address\",\"name\":\"contractAddress\",\"type\":\"address\"}],\"name\":\"isRegistered\",\"outputs\":[{\"internalType\":\"bool\",\"name\":\"registered\",\"type\":\"bool\"}],\"stateMutability\":\"view\",\"type\":\"function\"},{\"inputs\":[],\"name\":\"register\",\"outputs\":[],\"stateMutability\":\"nonpayable\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"address\",\"name\":\"recipient\",\"type\":\"address\"}],\"name\":\"withdraw\",\"outputs\":[],\"stateMutability\":\"nonpayable\",\"type\":\"function\"}]"
 )
 
 // CUSTOM CODE STARTS HERE
@@ -132,15 +134,8 @@ func (c *GasRevenueConfig) Address() common.Address {
 
 // Configure configures [state] with the initial configuration.
 func (c *GasRevenueConfig) Configure(_ ChainConfig, state StateDB, _ BlockContext) {
-	// This will be called in the first block where HelloWorld stateful precompile is enabled.
-	// 1) If BlockTimestamp is nil, this will not be called
-	// 2) If BlockTimestamp is 0, this will be called while setting up the genesis block
-	// 3) If BlockTimestamp is 1000, this will be called while processing the first block
-	// whose timestamp is >= 1000
-	//
-	// Set the initial value under [common.BytesToHash([]byte("storageKey")] to "Hello World!"
-	res := common.LeftPadBytes([]byte("GasRevenue"), common.HashLength)
-	state.SetState(GasRevenueAddress, common.BytesToHash([]byte("storageKey")), common.BytesToHash(res))
+
+	// CUSTOM CODE STARTS HERE
 }
 
 // Contract returns the singleton stateful precompiled contract to be used for GasRevenue.
@@ -194,13 +189,104 @@ func balanceOf(accessibleState PrecompileAccessibleState, caller common.Address,
 	}
 
 	// CUSTOM CODE STARTS HERE
-	value := accessibleState.GetStateDB().GetState(GasRevenueAddress, common.BytesToHash(inputStruct[:]))
+	value := accessibleState.GetStateDB().GetState(GasRevenueAddress, common.BytesToHash(append([]byte("balanceOf"), inputStruct.Bytes()...)))
 
 	output := value.Big()
 	packedOutput, err := PackBalanceOfOutput(output)
 	if err != nil {
 		return nil, remainingGas, err
 	}
+
+	// Return the packed output and the remaining gas
+	return packedOutput, remainingGas, nil
+}
+
+// UnpackIsRegisteredInput attempts to unpack [input] into the common.Address type argument
+// assumes that [input] does not include selector (omits first 4 func signature bytes)
+func UnpackIsRegisteredInput(input []byte) (common.Address, error) {
+	res, err := GasRevenueABI.UnpackInput("isRegistered", input)
+	if err != nil {
+		return common.Address{}, err
+	}
+	unpacked := *abi.ConvertType(res[0], new(common.Address)).(*common.Address)
+	return unpacked, nil
+}
+
+// PackIsRegistered packs [contractAddress] of type common.Address into the appropriate arguments for isRegistered.
+// the packed bytes include selector (first 4 func signature bytes).
+// This function is mostly used for tests.
+func PackIsRegistered(contractAddress common.Address) ([]byte, error) {
+	return GasRevenueABI.Pack("isRegistered", contractAddress)
+}
+
+// PackIsRegisteredOutput attempts to pack given registered of type bool
+// to conform the ABI outputs.
+func PackIsRegisteredOutput(registered bool) ([]byte, error) {
+	return GasRevenueABI.PackOutput("isRegistered", registered)
+}
+
+func isRegistered(accessibleState PrecompileAccessibleState, caller common.Address, addr common.Address, input []byte, suppliedGas uint64, readOnly bool) (ret []byte, remainingGas uint64, err error) {
+	if remainingGas, err = deductGas(suppliedGas, IsRegisteredGasCost); err != nil {
+		return nil, 0, err
+	}
+	// attempts to unpack [input] into the arguments to the IsRegisteredInput.
+	// Assumes that [input] does not include selector
+	// You can use unpacked [inputStruct] variable in your code
+	inputStruct, err := UnpackIsRegisteredInput(input)
+	if err != nil {
+		return nil, remainingGas, err
+	}
+
+	// CUSTOM CODE STARTS HERE
+	value := accessibleState.GetStateDB().GetState(GasRevenueAddress, common.BytesToHash(append([]byte("isRegistered"), inputStruct.Bytes()...)))
+
+	output := value.Big().Cmp(big.NewInt(0)) != 0
+	packedOutput, err := PackIsRegisteredOutput(output)
+	if err != nil {
+		return nil, remainingGas, err
+	}
+
+	// Return the packed output and the remaining gas
+	return packedOutput, remainingGas, nil
+}
+
+// PackRegister packs the include selector (first 4 func signature bytes).
+// This function is mostly used for tests.
+func PackRegister() ([]byte, error) {
+	return GasRevenueABI.Pack("register")
+}
+
+func register(accessibleState PrecompileAccessibleState, caller common.Address, addr common.Address, input []byte, suppliedGas uint64, readOnly bool) (ret []byte, remainingGas uint64, err error) {
+	if remainingGas, err = deductGas(suppliedGas, RegisterGasCost); err != nil {
+		return nil, 0, err
+	}
+	if readOnly {
+		return nil, remainingGas, vmerrs.ErrWriteProtection
+	}
+	// no input provided for this function
+
+	// CUSTOM CODE STARTS HERE
+	// call supportsInterface function with the IS_CONTRACT interface id by using callfromprecompile
+	// FIXME: is it working?
+	result, leftOverGas, err := accessibleState.CallFromPrecompile(addr, caller, common.Hex2Bytes("01ffc9a7000000000000000000000000"), 0, big.NewInt(0))
+	if err != nil {
+		return nil, leftOverGas, err
+	}
+	if len(result) == 0 {
+		return nil, leftOverGas, vmerrs.ErrExecutionReverted
+	}
+
+	// check if already registered
+	isRegistered := accessibleState.GetStateDB().GetState(GasRevenueAddress, common.BytesToHash(append([]byte("isRegistered"), caller.Bytes()...)))
+	if isRegistered.Big().Cmp(big.NewInt(0)) != 0 {
+		return nil, remainingGas, vmerrs.ErrExecutionReverted
+	}
+
+	// register
+	accessibleState.GetStateDB().SetState(GasRevenueAddress, common.BytesToHash(append([]byte("isRegistered"), caller.Bytes()...)), common.BytesToHash(big.NewInt(1).Bytes()))
+
+	// this function does not return an output, leave this one as is
+	packedOutput := []byte{}
 
 	// Return the packed output and the remaining gas
 	return packedOutput, remainingGas, nil
@@ -217,11 +303,11 @@ func UnpackWithdrawInput(input []byte) (common.Address, error) {
 	return unpacked, nil
 }
 
-// PackWithdraw packs [contractAddress] of type common.Address into the appropriate arguments for withdraw.
+// PackWithdraw packs [recipient] of type common.Address into the appropriate arguments for withdraw.
 // the packed bytes include selector (first 4 func signature bytes).
 // This function is mostly used for tests.
-func PackWithdraw(contractAddress common.Address) ([]byte, error) {
-	return GasRevenueABI.Pack("withdraw", contractAddress)
+func PackWithdraw(recipient common.Address) ([]byte, error) {
+	return GasRevenueABI.Pack("withdraw", recipient)
 }
 
 func withdraw(accessibleState PrecompileAccessibleState, caller common.Address, addr common.Address, input []byte, suppliedGas uint64, readOnly bool) (ret []byte, remainingGas uint64, err error) {
@@ -240,11 +326,27 @@ func withdraw(accessibleState PrecompileAccessibleState, caller common.Address, 
 	}
 
 	// CUSTOM CODE STARTS HERE
-	value := accessibleState.GetStateDB().GetState(GasRevenueAddress, common.BytesToHash(inputStruct[:]))
+
+	// check if caller is the input address
+	if caller != inputStruct {
+		return nil, remainingGas, vmerrs.ErrExecutionReverted
+	}
+
+	// check if caller is registered
+	isRegistered := accessibleState.GetStateDB().GetState(GasRevenueAddress, common.BytesToHash(append([]byte("isRegistered"), caller.Bytes()...)))
+	if isRegistered.Big().Cmp(big.NewInt(0)) == 0 {
+		return nil, remainingGas, vmerrs.ErrExecutionReverted
+	}
+
+	value := accessibleState.GetStateDB().GetState(GasRevenueAddress, common.BytesToHash(append([]byte("balanceOf"), caller.Bytes()...)))
 	accessibleState.GetStateDB().SubBalance(GasRevenueAddress, value.Big())
 	accessibleState.GetStateDB().AddBalance(caller, value.Big())
 
-	accessibleState.GetStateDB().SetState(GasRevenueAddress, common.BytesToHash(inputStruct[:]), common.BytesToHash([]byte{}))
+	accessibleState.GetStateDB().SetState(
+		GasRevenueAddress,
+		common.BytesToHash(append([]byte("balanceOf"), caller.Bytes()...)),
+		common.BytesToHash([]byte{}),
+	)
 
 	// this function does not return an output, leave this one as is
 	packedOutput := []byte{}
@@ -263,6 +365,18 @@ func createGasRevenuePrecompile(precompileAddr common.Address) StatefulPrecompil
 		panic("given method does not exist in the ABI")
 	}
 	functions = append(functions, newStatefulPrecompileFunction(methodBalanceOf.ID, balanceOf))
+
+	methodIsRegistered, ok := GasRevenueABI.Methods["isRegistered"]
+	if !ok {
+		panic("given method does not exist in the ABI")
+	}
+	functions = append(functions, newStatefulPrecompileFunction(methodIsRegistered.ID, isRegistered))
+
+	methodRegister, ok := GasRevenueABI.Methods["register"]
+	if !ok {
+		panic("given method does not exist in the ABI")
+	}
+	functions = append(functions, newStatefulPrecompileFunction(methodRegister.ID, register))
 
 	methodWithdraw, ok := GasRevenueABI.Methods["withdraw"]
 	if !ok {
