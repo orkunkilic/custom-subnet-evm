@@ -33,6 +33,7 @@ import (
 
 	"github.com/ethereum/go-ethereum/crypto"
 
+	"github.com/ava-labs/subnet-evm/constants"
 	"github.com/ava-labs/subnet-evm/core/types"
 	"github.com/ava-labs/subnet-evm/core/vm"
 	"github.com/ava-labs/subnet-evm/params"
@@ -370,10 +371,21 @@ func (st *StateTransition) TransitionDb() (*ExecutionResult, error) {
 		st.state.AddBalance(st.evm.Context.Coinbase, new(big.Int).Mul(new(big.Int).SetUint64(st.gasUsed()), st.gasPrice))
 	} else {
 		// registered
-		half := new(big.Int).Mul(new(big.Int).SetUint64(st.gasUsed()/2), st.gasPrice)
+		full := new(big.Int).Mul(new(big.Int).SetUint64(st.gasUsed()), st.gasPrice)
+		half := new(big.Int).Div(full, big.NewInt(2))
+		quarter := new(big.Int).Div(full, big.NewInt(4))
 
-		st.state.AddBalance(st.evm.Context.Coinbase, half)      // half to coinbase
-		st.state.AddBalance(precompile.GasRevenueAddress, half) // half to gas revenue address
+		// half to coinbase
+		// SubnetEVM: coinbase is blackhole, miner, or rewardRecipient depending on config
+		// Initial config will be allowFeeRecipient=true, so coinbase is rewardRecipient
+		// IMPORTANT: if you upgrade the precompile settings, this code should be updated.
+		st.state.AddBalance(st.evm.Context.Coinbase, quarter) // quarter to coinbase
+
+		// quarter to gas revenue address
+		st.state.AddBalance(precompile.GasRevenueAddress, quarter)
+
+		// burn half
+		st.state.AddBalance(constants.BlackholeAddr, half)
 
 		// get pre-balance
 		balance := st.state.GetState(
