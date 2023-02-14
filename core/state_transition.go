@@ -372,38 +372,32 @@ func (st *StateTransition) TransitionDb() (*ExecutionResult, error) {
 	} else {
 		// registered
 		full := new(big.Int).Mul(new(big.Int).SetUint64(st.gasUsed()), st.gasPrice)
-		half := new(big.Int).Div(full, big.NewInt(2))
-		quarter := new(big.Int).Div(full, big.NewInt(4))
 
-		// half to coinbase
+		// get blackhole percentage
+		blackholePercentage := precompile.GetPercentage(st.state, 0)
+		coinbasePercentage := precompile.GetPercentage(st.state, 1)
+		gasRevenuePercentage := precompile.GetPercentage(st.state, 2)
+
+		blackHoleAmount := new(big.Int).Mul(full, blackholePercentage)
+		blackHoleAmount = new(big.Int).Div(blackHoleAmount, big.NewInt(precompile.PercentageDenominator))
+
+		coinbaseAmount := new(big.Int).Mul(full, coinbasePercentage)
+		coinbaseAmount = new(big.Int).Div(coinbaseAmount, big.NewInt(precompile.PercentageDenominator))
+
+		gasRevenueAmount := new(big.Int).Mul(full, gasRevenuePercentage)
+		gasRevenueAmount = new(big.Int).Div(gasRevenueAmount, big.NewInt(precompile.PercentageDenominator))
+
 		// SubnetEVM: coinbase is blackhole, miner, or rewardRecipient depending on config
-		// Initial config will be allowFeeRecipient=true, so coinbase is rewardRecipient
-		// IMPORTANT: if you upgrade the precompile settings, this code should be updated.
-		st.state.AddBalance(st.evm.Context.Coinbase, quarter) // quarter to coinbase
-
-		// quarter to gas revenue address
-		st.state.AddBalance(precompile.GasRevenueAddress, quarter)
-
-		// burn half
-		st.state.AddBalance(constants.BlackholeAddr, half)
+		// Initial config will be allowFeeRecipient=true, so coinbase is miner
+		st.state.AddBalance(constants.BlackholeAddr, blackHoleAmount)
+		st.state.AddBalance(st.evm.Context.Coinbase, coinbaseAmount)
+		st.state.AddBalance(precompile.GasRevenueAddress, gasRevenueAmount)
 
 		// get pre-balance
-		balance := st.state.GetState(
-			precompile.GasRevenueAddress,
-			common.BytesToHash(append([]byte("balanceOf"), st.to().Bytes()...)),
-		)
+		balance := precompile.BalanceOf(st.state, st.to())
 
 		// record total gas revenue
-		st.state.SetState(
-			precompile.GasRevenueAddress,
-			common.BytesToHash(append([]byte("balanceOf"), st.to().Bytes()...)),
-			common.BytesToHash(
-				new(big.Int).Add(
-					balance.Big(),
-					half,
-				).Bytes(),
-			),
-		)
+		precompile.SetBalanceOf(st.state, st.to(), new(big.Int).Add(balance, gasRevenueAmount))
 	}
 
 	return &ExecutionResult{
