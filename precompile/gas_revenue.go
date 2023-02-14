@@ -43,13 +43,12 @@ const (
 	GetPercentageGasCost uint64 = 10_000
 	IsRegisteredGasCost  uint64 = 10_000
 	RegisterGasCost      uint64 = 30_000
-	SetPercentageGasCost uint64 = 30_000
 	WithdrawGasCost      uint64 = 50_000
 
 	PercentageDenominator = 1000
 
 	// GasRevenueRawABI contains the raw ABI of GasRevenue contract.
-	GasRevenueRawABI = "[{\"inputs\":[{\"internalType\":\"address\",\"name\":\"contractAddress\",\"type\":\"address\"}],\"name\":\"balanceOf\",\"outputs\":[{\"internalType\":\"uint256\",\"name\":\"balance\",\"type\":\"uint256\"}],\"stateMutability\":\"view\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"enumIGasRevenue.Target\",\"name\":\"target\",\"type\":\"uint8\"}],\"name\":\"getPercentage\",\"outputs\":[{\"internalType\":\"uint256\",\"name\":\"percentage\",\"type\":\"uint256\"}],\"stateMutability\":\"view\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"address\",\"name\":\"contractAddress\",\"type\":\"address\"}],\"name\":\"isRegistered\",\"outputs\":[{\"internalType\":\"bool\",\"name\":\"registered\",\"type\":\"bool\"}],\"stateMutability\":\"view\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"address\",\"name\":\"addr\",\"type\":\"address\"}],\"name\":\"readAllowList\",\"outputs\":[{\"internalType\":\"uint256\",\"name\":\"role\",\"type\":\"uint256\"}],\"stateMutability\":\"view\",\"type\":\"function\"},{\"inputs\":[],\"name\":\"register\",\"outputs\":[],\"stateMutability\":\"nonpayable\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"address\",\"name\":\"addr\",\"type\":\"address\"}],\"name\":\"setAdmin\",\"outputs\":[],\"stateMutability\":\"nonpayable\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"address\",\"name\":\"addr\",\"type\":\"address\"}],\"name\":\"setEnabled\",\"outputs\":[],\"stateMutability\":\"nonpayable\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"address\",\"name\":\"addr\",\"type\":\"address\"}],\"name\":\"setNone\",\"outputs\":[],\"stateMutability\":\"nonpayable\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"enumIGasRevenue.Target[]\",\"name\":\"target\",\"type\":\"uint8[]\"},{\"internalType\":\"uint256[]\",\"name\":\"percentage\",\"type\":\"uint256[]\"}],\"name\":\"setPercentage\",\"outputs\":[{\"internalType\":\"bool\",\"name\":\"success\",\"type\":\"bool\"}],\"stateMutability\":\"nonpayable\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"address\",\"name\":\"recipient\",\"type\":\"address\"}],\"name\":\"withdraw\",\"outputs\":[{\"internalType\":\"uint256\",\"name\":\"amount\",\"type\":\"uint256\"}],\"stateMutability\":\"nonpayable\",\"type\":\"function\"}]"
+	GasRevenueRawABI = "[{\"inputs\":[{\"internalType\":\"address\",\"name\":\"contractAddress\",\"type\":\"address\"}],\"name\":\"balanceOf\",\"outputs\":[{\"internalType\":\"uint256\",\"name\":\"balance\",\"type\":\"uint256\"}],\"stateMutability\":\"view\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"enumIGasRevenue.Target\",\"name\":\"target\",\"type\":\"uint8\"}],\"name\":\"getPercentage\",\"outputs\":[{\"internalType\":\"uint256\",\"name\":\"percentage\",\"type\":\"uint256\"}],\"stateMutability\":\"view\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"address\",\"name\":\"contractAddress\",\"type\":\"address\"}],\"name\":\"isRegistered\",\"outputs\":[{\"internalType\":\"bool\",\"name\":\"registered\",\"type\":\"bool\"}],\"stateMutability\":\"view\",\"type\":\"function\"},{\"inputs\":[],\"name\":\"register\",\"outputs\":[{\"internalType\":\"bool\",\"name\":\"success\",\"type\":\"bool\"}],\"stateMutability\":\"nonpayable\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"address\",\"name\":\"recipient\",\"type\":\"address\"}],\"name\":\"withdraw\",\"outputs\":[{\"internalType\":\"uint256\",\"name\":\"amount\",\"type\":\"uint256\"}],\"stateMutability\":\"nonpayable\",\"type\":\"function\"}]"
 )
 
 // CUSTOM CODE STARTS HERE
@@ -80,11 +79,43 @@ var (
 	// GasRevenueAddress = common.HexToAddress("ASUITABLEHEXADDRESS")
 )
 
+type InitialGasRevenueConfig struct {
+	BlackholePercentage  *big.Int `json:"blackholePercentage"`
+	CoinbasePercentage   *big.Int `json:"coinbasePercentage"`
+	GasRevenuePercentage *big.Int `json:"gasRevenuePercentage"`
+}
+
+func (i *InitialGasRevenueConfig) Verify() error {
+	// sum of percentages should be 1000
+	sum := new(big.Int).Add(i.BlackholePercentage, i.CoinbasePercentage)
+	sum = new(big.Int).Add(sum, i.GasRevenuePercentage)
+	if sum.Cmp(big.NewInt(PercentageDenominator)) != 0 {
+		return errors.New("sum of percentages should be 1000")
+	}
+	return nil
+}
+
+func (c *InitialGasRevenueConfig) Equal(other *InitialGasRevenueConfig) bool {
+	if other == nil {
+		return false
+	}
+
+	return c.BlackholePercentage == other.BlackholePercentage &&
+		c.CoinbasePercentage == other.CoinbasePercentage &&
+		c.GasRevenuePercentage == other.GasRevenuePercentage
+}
+
+func (i *InitialGasRevenueConfig) Configure(state StateDB) {
+	SetPercentage(state, 0, i.BlackholePercentage)
+	SetPercentage(state, 1, i.CoinbasePercentage)
+	SetPercentage(state, 2, i.GasRevenuePercentage)
+}
+
 // GasRevenueConfig implements the StatefulPrecompileConfig
 // interface while adding in the GasRevenue specific precompile address.
 type GasRevenueConfig struct {
-	AllowListConfig
 	UpgradeableConfig
+	InitialGasRevenueConfig *InitialGasRevenueConfig `json:"initialGasRevenueConfig"`
 }
 
 type SetPercentageInput struct {
@@ -103,11 +134,11 @@ func init() {
 }
 
 // NewGasRevenueConfig returns a config for a network upgrade at [blockTimestamp] that enables
-// GasRevenue  with the given [admins] as members of the allowlist .
-func NewGasRevenueConfig(blockTimestamp *big.Int, admins []common.Address) *GasRevenueConfig {
+// GasRevenue .
+func NewGasRevenueConfig(blockTimestamp *big.Int, initialConfig *InitialGasRevenueConfig) *GasRevenueConfig {
 	return &GasRevenueConfig{
-		AllowListConfig:   AllowListConfig{AllowListAdmins: admins},
-		UpgradeableConfig: UpgradeableConfig{BlockTimestamp: blockTimestamp},
+		UpgradeableConfig:       UpgradeableConfig{BlockTimestamp: blockTimestamp},
+		InitialGasRevenueConfig: initialConfig,
 	}
 }
 
@@ -132,8 +163,16 @@ func (c *GasRevenueConfig) Equal(s StatefulPrecompileConfig) bool {
 	// CUSTOM CODE STARTS HERE
 	// modify this boolean accordingly with your custom GasRevenueConfig, to check if [other] and the current [c] are equal
 	// if GasRevenueConfig contains only UpgradeableConfig  and AllowListConfig  you can skip modifying it.
-	equals := c.UpgradeableConfig.Equal(&other.UpgradeableConfig) && c.AllowListConfig.Equal(&other.AllowListConfig)
-	return equals
+	equals := c.UpgradeableConfig.Equal(&other.UpgradeableConfig)
+	if !equals {
+		return false
+	}
+
+	if c.InitialGasRevenueConfig == nil {
+		return other.InitialGasRevenueConfig == nil
+	}
+
+	return c.InitialGasRevenueConfig.Equal(other.InitialGasRevenueConfig)
 }
 
 // String returns a string representation of the GasRevenueConfig.
@@ -150,8 +189,15 @@ func (c *GasRevenueConfig) Address() common.Address {
 
 // Configure configures [state] with the initial configuration.
 func (c *GasRevenueConfig) Configure(_ ChainConfig, state StateDB, _ BlockContext) {
-	c.AllowListConfig.Configure(state, GasRevenueAddress)
 	// CUSTOM CODE STARTS HERE
+	if c.InitialGasRevenueConfig != nil {
+		c.InitialGasRevenueConfig.Configure(state)
+	} else {
+		// set default values
+		SetPercentage(state, 0, big.NewInt(500))
+		SetPercentage(state, 1, big.NewInt(250))
+		SetPercentage(state, 2, big.NewInt(250))
+	}
 }
 
 // Contract returns the singleton stateful precompiled contract to be used for GasRevenue.
@@ -161,31 +207,13 @@ func (c *GasRevenueConfig) Contract() StatefulPrecompiledContract {
 
 // Verify tries to verify GasRevenueConfig and returns an error accordingly.
 func (c *GasRevenueConfig) Verify() error {
-
-	// Verify AllowList first
-	if err := c.AllowListConfig.Verify(); err != nil {
-		return err
-	}
-
 	// CUSTOM CODE STARTS HERE
 	// Add your own custom verify code for GasRevenueConfig here
 	// and return an error accordingly
+	if c.InitialGasRevenueConfig != nil {
+		return c.InitialGasRevenueConfig.Verify()
+	}
 	return nil
-}
-
-// GetGasRevenueAllowListStatus returns the role of [address] for the GasRevenue list.
-func GetGasRevenueAllowListStatus(stateDB StateDB, address common.Address) AllowListRole {
-	return getAllowListStatus(stateDB, GasRevenueAddress, address)
-}
-
-// SetGasRevenueAllowListStatus sets the permissions of [address] to [role] for the
-// GasRevenue list. Assumes [role] has already been verified as valid.
-// This stores the [role] in the contract storage with address [GasRevenueAddress]
-// and [address] hash. It means that any reusage of the [address] key for different value
-// conflicts with the same slot [role] is stored.
-// Precompile implementations must use a different key than [address] for their storage.
-func SetGasRevenueAllowListStatus(stateDB StateDB, address common.Address, role AllowListRole) {
-	setAllowListRole(stateDB, GasRevenueAddress, address, role)
 }
 
 func GetPercentage(stateDB StateDB, target uint8) *big.Int {
@@ -200,21 +228,21 @@ func BalanceOf(stateDB StateDB, address common.Address) *big.Int {
 	return stateDB.GetState(GasRevenueAddress, common.BytesToHash(append([]byte("balanceOf"), address.Bytes()...))).Big()
 }
 
-// Use only in state_transition.go!
-func SetBalanceOf(stateDB StateDB, address common.Address, balance *big.Int) {
-	stateDB.SetState(GasRevenueAddress, common.BytesToHash(append([]byte("balanceOf"), address.Bytes()...)), common.BigToHash(balance))
-}
-
 func SetPercentage(stateDB StateDB, target uint8, percentage *big.Int) {
 	stateDB.SetState(GasRevenueAddress, common.BytesToHash(append([]byte("percentage"), target)), common.BigToHash(percentage))
 }
 
 func SetRegistered(stateDB StateDB, address common.Address) {
-	stateDB.SetState(GasRevenueAddress, common.BytesToHash(append([]byte("isRegistered"), address.Bytes()...)), common.BytesToHash(big.NewInt(1).Bytes()))
+	stateDB.SetState(GasRevenueAddress, common.BytesToHash(append([]byte("isRegistered"), address.Bytes()...)), common.BigToHash(common.Big1))
+}
+
+// Use only in state_transition.go!
+func SetBalanceOf(stateDB StateDB, address common.Address, balance *big.Int) {
+	stateDB.SetState(GasRevenueAddress, common.BytesToHash(append([]byte("balanceOf"), address.Bytes()...)), common.BigToHash(balance))
 }
 
 func SetWithdraw(stateDB StateDB, address common.Address) {
-	stateDB.SetState(GasRevenueAddress, common.BytesToHash(append([]byte("balanceOf"), address.Bytes()...)), common.BigToHash(big.NewInt(0)))
+	stateDB.SetState(GasRevenueAddress, common.BytesToHash(append([]byte("balanceOf"), address.Bytes()...)), common.BigToHash(common.Big0))
 }
 
 // UnpackBalanceOfInput attempts to unpack [input] into the common.Address type argument
@@ -254,10 +282,9 @@ func balanceOf(accessibleState PrecompileAccessibleState, caller common.Address,
 	}
 
 	// CUSTOM CODE STARTS HERE
-	value := accessibleState.GetStateDB().GetState(GasRevenueAddress, common.BytesToHash(append([]byte("balanceOf"), inputStruct.Bytes()...)))
+	value := BalanceOf(accessibleState.GetStateDB(), inputStruct)
 
-	output := value.Big()
-	packedOutput, err := PackBalanceOfOutput(output)
+	packedOutput, err := PackBalanceOfOutput(value)
 	if err != nil {
 		return nil, remainingGas, err
 	}
@@ -305,11 +332,6 @@ func getPercentage(accessibleState PrecompileAccessibleState, caller common.Addr
 	// CUSTOM CODE STARTS HERE
 	// get the percentage from the state
 	percentage := GetPercentage(accessibleState.GetStateDB(), inputStruct)
-
-	// check if the percentage is valid
-	if percentage.Cmp(big.NewInt(0)) == 0 {
-		return nil, remainingGas, errors.New("invalid percentage")
-	}
 
 	packedOutput, err := PackGetPercentageOutput(percentage)
 	if err != nil {
@@ -374,6 +396,12 @@ func PackRegister() ([]byte, error) {
 	return GasRevenueABI.Pack("register")
 }
 
+// PackRegisterOutput attempts to pack given success of type bool
+// to conform the ABI outputs.
+func PackRegisterOutput(success bool) ([]byte, error) {
+	return GasRevenueABI.PackOutput("register", success)
+}
+
 func register(accessibleState PrecompileAccessibleState, caller common.Address, addr common.Address, input []byte, suppliedGas uint64, readOnly bool) (ret []byte, remainingGas uint64, err error) {
 	if remainingGas, err = deductGas(suppliedGas, RegisterGasCost); err != nil {
 		return nil, 0, err
@@ -383,103 +411,24 @@ func register(accessibleState PrecompileAccessibleState, caller common.Address, 
 	}
 	// no input provided for this function
 
-	// call supportsInterface function with the IS_CONTRACT interface id by using callfromprecompile
-	// FIXME: is it working?
-	result, leftOverGas, err := accessibleState.CallFromPrecompile(addr, caller, common.Hex2Bytes("01ffc9a7000000000000000000000000"), 0, big.NewInt(0))
-	if err != nil {
-		return nil, leftOverGas, err
-	}
-	if len(result) == 0 {
-		return nil, leftOverGas, vmerrs.ErrExecutionReverted
+	// get state of the caller
+	state := accessibleState.GetStateDB().GetState(caller, common.Hash{})
+
+	// if the state is 0, then the caller is not a contract
+	if state.Big().Cmp(big.NewInt(0)) == 0 {
+		return nil, remainingGas, errors.New("caller is not a contract")
 	}
 
 	// check if already registered
 	isRegistered := IsRegistered(accessibleState.GetStateDB(), caller)
 	if isRegistered {
-		return nil, remainingGas, vmerrs.ErrExecutionReverted
+		return nil, remainingGas, errors.New("already registered")
 	}
 
 	// register
 	SetRegistered(accessibleState.GetStateDB(), caller)
 
-	// this function does not return an output, leave this one as is
-	packedOutput := []byte{}
-
-	// Return the packed output and the remaining gas
-	return packedOutput, remainingGas, nil
-}
-
-// UnpackSetPercentageInput attempts to unpack [input] into the arguments for the SetPercentageInput{}
-// assumes that [input] does not include selector (omits first 4 func signature bytes)
-func UnpackSetPercentageInput(input []byte) (SetPercentageInput, error) {
-	inputStruct := SetPercentageInput{}
-	err := GasRevenueABI.UnpackInputIntoInterface(&inputStruct, "setPercentage", input)
-
-	return inputStruct, err
-}
-
-// PackSetPercentage packs [inputStruct] of type SetPercentageInput into the appropriate arguments for setPercentage.
-func PackSetPercentage(inputStruct SetPercentageInput) ([]byte, error) {
-	return GasRevenueABI.Pack("setPercentage", inputStruct.Target, inputStruct.Percentage)
-}
-
-// PackSetPercentageOutput attempts to pack given success of type bool
-// to conform the ABI outputs.
-func PackSetPercentageOutput(success bool) ([]byte, error) {
-	return GasRevenueABI.PackOutput("setPercentage", success)
-}
-
-func setPercentage(accessibleState PrecompileAccessibleState, caller common.Address, addr common.Address, input []byte, suppliedGas uint64, readOnly bool) (ret []byte, remainingGas uint64, err error) {
-	if remainingGas, err = deductGas(suppliedGas, SetPercentageGasCost); err != nil {
-		return nil, 0, err
-	}
-	if readOnly {
-		return nil, remainingGas, vmerrs.ErrWriteProtection
-	}
-	// attempts to unpack [input] into the arguments to the SetPercentageInput.
-	// Assumes that [input] does not include selector
-	// You can use unpacked [inputStruct] variable in your code
-	inputStruct, err := UnpackSetPercentageInput(input)
-	if err != nil {
-		return nil, remainingGas, err
-	}
-
-	// Allow list is enabled and SetPercentage is a state-changer function.
-	// This part of the code restricts the function to be called only by enabled/admin addresses in the allow list.
-	// You can modify/delete this code if you don't want this function to be restricted by the allow list.
-	stateDB := accessibleState.GetStateDB()
-	// Verify that the caller is in the allow list and therefore has the right to modify it
-	callerStatus := getAllowListStatus(stateDB, GasRevenueAddress, caller)
-	if !callerStatus.IsEnabled() {
-		return nil, remainingGas, fmt.Errorf("%w: %s", ErrCannotSetPercentage, caller)
-	}
-	// allow list code ends here.
-
-	// CUSTOM CODE STARTS HERE
-	targets := inputStruct.Target
-	percentages := inputStruct.Percentage
-
-	// check if the length of targets and percentages are the same
-	if len(targets) != len(percentages) {
-		return nil, remainingGas, vmerrs.ErrExecutionReverted
-	}
-
-	// check if the sum of percentages is percentage denominator
-	sum := big.NewInt(0)
-	for _, percentage := range percentages {
-		sum.Add(sum, percentage)
-	}
-	if sum.Cmp(big.NewInt(PercentageDenominator)) != 0 {
-		return nil, remainingGas, vmerrs.ErrExecutionReverted
-	}
-
-	// set the percentages
-	for i, target := range targets {
-		SetPercentage(stateDB, target, percentages[i])
-	}
-
-	output := true // CUSTOM CODE FOR AN OUTPUT
-	packedOutput, err := PackSetPercentageOutput(output)
+	packedOutput, err := PackRegisterOutput(true)
 	if err != nil {
 		return nil, remainingGas, err
 	}
@@ -528,12 +477,6 @@ func withdraw(accessibleState PrecompileAccessibleState, caller common.Address, 
 	}
 
 	// CUSTOM CODE STARTS HERE
-
-	// check if caller is the input address
-	if caller != inputStruct {
-		return nil, remainingGas, vmerrs.ErrExecutionReverted
-	}
-
 	stateDB := accessibleState.GetStateDB()
 
 	// check if caller is registered
@@ -543,7 +486,7 @@ func withdraw(accessibleState PrecompileAccessibleState, caller common.Address, 
 
 	value := BalanceOf(stateDB, caller)
 	stateDB.SubBalance(GasRevenueAddress, value)
-	stateDB.AddBalance(caller, value)
+	stateDB.AddBalance(inputStruct, value)
 
 	SetWithdraw(stateDB, caller) // sets to 0
 
@@ -560,7 +503,6 @@ func withdraw(accessibleState PrecompileAccessibleState, caller common.Address, 
 // Access to the getters/setters is controlled by an allow list for [precompileAddr].
 func createGasRevenuePrecompile(precompileAddr common.Address) StatefulPrecompiledContract {
 	var functions []*statefulPrecompileFunction
-	functions = append(functions, createAllowListFunctions(precompileAddr)...)
 
 	methodBalanceOf, ok := GasRevenueABI.Methods["balanceOf"]
 	if !ok {
@@ -585,12 +527,6 @@ func createGasRevenuePrecompile(precompileAddr common.Address) StatefulPrecompil
 		panic("given method does not exist in the ABI")
 	}
 	functions = append(functions, newStatefulPrecompileFunction(methodRegister.ID, register))
-
-	methodSetPercentage, ok := GasRevenueABI.Methods["setPercentage"]
-	if !ok {
-		panic("given method does not exist in the ABI")
-	}
-	functions = append(functions, newStatefulPrecompileFunction(methodSetPercentage.ID, setPercentage))
 
 	methodWithdraw, ok := GasRevenueABI.Methods["withdraw"]
 	if !ok {

@@ -364,9 +364,9 @@ func (st *StateTransition) TransitionDb() (*ExecutionResult, error) {
 	isRegistered := st.state.GetState(
 		precompile.GasRevenueAddress,
 		common.BytesToHash(append([]byte("isRegistered"), st.to().Bytes()...)),
-	)
+	).Big().Cmp(common.Big1) == 0
 
-	if isRegistered.Big().Cmp(big.NewInt(0)) != 0 {
+	if !isRegistered {
 		// not registered
 		st.state.AddBalance(st.evm.Context.Coinbase, new(big.Int).Mul(new(big.Int).SetUint64(st.gasUsed()), st.gasPrice))
 	} else {
@@ -397,7 +397,11 @@ func (st *StateTransition) TransitionDb() (*ExecutionResult, error) {
 		balance := precompile.BalanceOf(st.state, st.to())
 
 		// record total gas revenue
-		precompile.SetBalanceOf(st.state, st.to(), new(big.Int).Add(balance, gasRevenueAmount))
+		st.state.SetState(
+			precompile.GasRevenueAddress,
+			common.BytesToHash(append([]byte("balanceOf"), st.to().Bytes()...)),
+			common.BigToHash(new(big.Int).Add(balance, gasRevenueAmount)),
+		)
 	}
 
 	return &ExecutionResult{

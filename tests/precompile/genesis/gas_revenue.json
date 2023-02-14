@@ -23,7 +23,15 @@
         "blockGasCostStep": 500000
       },
       "gasRevenueConfig": {
-        "blockTimestamp": 0
+        "blockTimestamp": 0,
+        "adminAddresses": [
+          "0x8db97C7cEcE249c2b98bDC0226Cc4C2A57BF52FC",
+          "0x0Fa8EA536Be85F32724D57A37758761B86416123",
+          "0x05F330F63c40e3ada2D33D88BA92f67284479F87"
+        ],
+        "blackholePercentage": 500,
+        "coinbasePercentage": 250,
+        "gasRevenuePercentage": 250
       }
     },
     "alloc": {
@@ -31,6 +39,9 @@
         "balance": "0x52B7D2DCC80CD2E4000000"
       },
       "0x0Fa8EA536Be85F32724D57A37758761B86416123": {
+        "balance": "0x52B7D2DCC80CD2E4000000"
+      },
+      "0x05F330F63c40e3ada2D33D88BA92f67284479F87": {
         "balance": "0x52B7D2DCC80CD2E4000000"
       }
     },

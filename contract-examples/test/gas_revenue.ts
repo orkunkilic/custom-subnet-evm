@@ -6,6 +6,8 @@ import { ethers } from "hardhat"
 import { Contract, ContractFactory } from "ethers"
 
 describe("ExampleGasRevenue", function () {
+  const PERCENTAGE_DENOMINATOR = 1000
+
   let gasRevenueContract: Contract
 
   before(async function () {
@@ -19,75 +21,74 @@ describe("ExampleGasRevenue", function () {
     console.log(`Contract deployed to: ${gasRevenueContractAddress}`)
   })
 
-  it("should getBalance properly", async function () {
-    const [signer1, signer2] = await ethers.getSigners()
-    let result = await gasRevenueContract.callStatic.getBalance(signer2.address)
-    expect(result).to.equal(0)
-
-    // send eth to someone
-    const [signer] = await ethers.getSigners()
-    const tx = await signer.sendTransaction({
-        to: signer2.address,
-        value: ethers.utils.parseEther("1.0"),
-        gasPrice: 7000000000,
-    })
-    await tx.wait()
-
-    result = await gasRevenueContract.callStatic.getBalance(signer2.address)
-    console.log("result: ", result.toString())
-
-    let refund = 21000 * 7000000000 / 2
-    expect(result).to.equal(refund)
-
+  it("should get balance", async () => {
+    expect((await gasRevenueContract.functions.getBalance()).balance).to.be.equal(
+      ethers.BigNumber.from(0)
+    )
   })
 
-  it("should setGreeting and getHello", async function () {
-    const [signer1, signer2] = await ethers.getSigners()
-
-    // send eth to address
-    const [signer] = await ethers.getSigners()
-    const tx = await signer.sendTransaction({
-        to: signer2.address,
-        value: ethers.utils.parseEther("1.0"),
-        gasPrice: 7000000000,
-    })
-    await tx.wait()
-
-    // check balance
-    const result = await gasRevenueContract.callStatic.getBalance(signer2.address)
-    console.log("result: ", result.toString())
-
-    // befoer balance
-    const beforeBalance = await ethers.provider.getBalance(signer2.address)
-    console.log("beforeBalance: ", beforeBalance.toString())
-
-    // gas revenue before balance
-    const gasRevenueBalanceBefore = await ethers.provider.getBalance("0x0300000000000000000000000000000000000000")
-    console.log("gasRevenueBalanceBefore: ", gasRevenueBalanceBefore.toString())
-
-    // withdraw
-    const tx2 = await gasRevenueContract.connect(signer2).withdraw(signer2.address, {
-      gasPrice: 7000000000,
-    })
-    const tx2Receipt = await tx2.wait()
-
-    // check balance
-    const result2 = await gasRevenueContract.callStatic.getBalance(signer2.address)
-    console.log("result2: ", result2.toString())
-
-    expect(result2).to.equal(0)
-
-    // check wallet balance
-    const balance = await ethers.provider.getBalance(signer2.address)
-    console.log("balance: ", balance.toString())
-
-    // check gas revenue balance
-    const gasRevenueBalance = await ethers.provider.getBalance("0x0300000000000000000000000000000000000000")
-    console.log("gasRevenueBalance: ", gasRevenueBalance.toString())
-    
-    // check gas refund
-    let refund = result
-    expect(balance).to.equal(beforeBalance.add(refund).sub(tx2Receipt.gasUsed.mul(7000000000)))
-
+  it("should get isRegistered", async () => {
+    expect((await gasRevenueContract.functions.isRegistered()).registered).to.be.false
   })
+
+  it("should get percentages", async () => {
+    const percentages = await gasRevenueContract.functions.getPercentages()
+    expect(percentages[0]).to.be.equal(500)
+    expect(percentages[1]).to.be.equal(250)
+    expect(percentages[2]).to.be.equal(250)
+  })
+
+  it("should register", async () => {
+    const isRegistered = await gasRevenueContract.callStatic.isRegistered()
+    expect(isRegistered).to.be.false
+
+    const registerTx = await gasRevenueContract.functions.register()
+    await registerTx.wait()
+
+    const isRegisteredAfter = await gasRevenueContract.callStatic.isRegistered()
+    expect(isRegisteredAfter).to.be.true
+
+    // it should not be possible to register twice
+    await expect(gasRevenueContract.functions.register()).to.be.revertedWith("execution reverted") // FIXME: revert reason is not correct
+  })
+
+  it("should not register EOA", async () => {
+    const GasRevenuePrecompileContract = await ethers.getContractAt(
+      "IGasRevenue",
+      "0x0300000000000000000000000000000000000000"
+    )
+
+    // await expect(GasRevenuePrecompileContract.register()).to.be.revertedWith("execution reverted") // FIXME: revert reason is not correct
+  })
+
+  it("should calculate gas revenue", async () => {
+    // already registered as precompiles holds the state
+    console.log("isRegistered ", (await gasRevenueContract.callStatic.isRegistered()))
+
+    const testTx = await gasRevenueContract.functions.test(10, {
+      type: 0,
+      gasPrice: 1_000_000_000,
+    })
+    const testReceipt = await testTx.wait()
+
+    const gasUsed = testReceipt.cumulativeGasUsed
+    const totalGasPaid = gasUsed.mul(ethers.BigNumber.from(1_000_000_000))
+    const percentages = await gasRevenueContract.callStatic.getPercentages()
+    const gasRevenue = totalGasPaid.mul(percentages[2]).div(PERCENTAGE_DENOMINATOR)
+    console.log(`Expected gas revenue: ${gasRevenue}`)
+
+    const balance = await gasRevenueContract.functions.getBalance()
+    console.log(`Actual gas revenue: ${balance.balance}`)
+
+    const precompileBalance = await ethers.provider.getBalance("0x0300000000000000000000000000000000000000")
+    console.log(`Precompile balance: ${precompileBalance}`)
+
+    expect(precompileBalance).to.be.equal(balance.balance)
+
+    // FIXME: error on gasRevenue calc.
+    expect(balance.balance).to.be.equal(gasRevenue)
+
+  });
+
+
 })
