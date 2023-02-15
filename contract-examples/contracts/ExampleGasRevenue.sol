@@ -11,7 +11,9 @@ contract ExampleGasRevenue {
   uint256 public sum;
 
   function register() public {
-    gasRevenue.register();
+    try gasRevenue.register() {} catch {
+      revert("register failed");
+    }
   }
 
   function isRegistered() public view returns (bool registered) {

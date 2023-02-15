@@ -64,11 +64,9 @@ var (
 var (
 	_ StatefulPrecompileConfig = &GasRevenueConfig{}
 
-	ErrCannotRegister = errors.New("non-enabled cannot call register")
-
-	ErrCannotSetPercentage = errors.New("non-enabled cannot call setPercentage")
-
-	ErrCannotWithdraw = errors.New("non-enabled cannot call withdraw")
+	ErrAlreadyRegistered = errors.New("contract already registered")
+	ErrNotRegistered     = errors.New("contract not registered")
+	ErrNotSmartContract  = errors.New("caller is not a smart contract")
 
 	GasRevenueABI abi.ABI // will be initialized by init function
 
@@ -416,13 +414,13 @@ func register(accessibleState PrecompileAccessibleState, caller common.Address, 
 
 	// if the state is 0, then the caller is not a contract
 	if state.Big().Cmp(big.NewInt(0)) == 0 {
-		return nil, remainingGas, errors.New("caller is not a contract")
+		return nil, remainingGas, ErrNotSmartContract
 	}
 
 	// check if already registered
 	isRegistered := IsRegistered(accessibleState.GetStateDB(), caller)
 	if isRegistered {
-		return nil, remainingGas, errors.New("already registered")
+		return nil, remainingGas, ErrAlreadyRegistered
 	}
 
 	// register
@@ -481,7 +479,7 @@ func withdraw(accessibleState PrecompileAccessibleState, caller common.Address, 
 
 	// check if caller is registered
 	if !IsRegistered(stateDB, caller) {
-		return nil, remainingGas, vmerrs.ErrExecutionReverted
+		return nil, remainingGas, ErrNotRegistered
 	}
 
 	value := BalanceOf(stateDB, caller)

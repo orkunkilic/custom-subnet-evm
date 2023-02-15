@@ -22,26 +22,29 @@ describe("ExampleGasRevenue", function () {
   })
 
   it("should get balance", async () => {
-    expect((await gasRevenueContract.functions.getBalance()).balance).to.be.equal(
+    expect((await gasRevenueContract.callStatic.getBalance())).to.be.equal(
       ethers.BigNumber.from(0)
     )
   })
 
   it("should get isRegistered", async () => {
-    expect((await gasRevenueContract.functions.isRegistered()).registered).to.be.false
+    expect((await gasRevenueContract.callStatic.isRegistered())).to.be.false
   })
 
   it("should get percentages", async () => {
-    const percentages = await gasRevenueContract.functions.getPercentages()
-    expect(percentages[0]).to.be.equal(500)
-    expect(percentages[1]).to.be.equal(250)
-    expect(percentages[2]).to.be.equal(250)
+    const percentages = await gasRevenueContract.callStatic.getPercentages()
+
+    // Initial config
+    expect(percentages.blackhole).to.be.equal(ethers.BigNumber.from(500))
+    expect(percentages.coinbase).to.be.equal(ethers.BigNumber.from(250))
+    expect(percentages.gasRevenueContract).to.be.equal(ethers.BigNumber.from(250))
   })
 
   it("should register", async () => {
     const isRegistered = await gasRevenueContract.callStatic.isRegistered()
     expect(isRegistered).to.be.false
 
+    // this also adds balance to the newly created contract
     const registerTx = await gasRevenueContract.functions.register()
     await registerTx.wait()
 
@@ -49,7 +52,7 @@ describe("ExampleGasRevenue", function () {
     expect(isRegisteredAfter).to.be.true
 
     // it should not be possible to register twice
-    await expect(gasRevenueContract.functions.register()).to.be.revertedWith("execution reverted") // FIXME: revert reason is not correct
+    await expect(gasRevenueContract.functions.register()).to.be.revertedWith("register failed") // FIXME: revert reason is not correct
   })
 
   it("should not register EOA", async () => {
@@ -58,12 +61,17 @@ describe("ExampleGasRevenue", function () {
       "0x0300000000000000000000000000000000000000"
     )
 
-    // await expect(GasRevenuePrecompileContract.register()).to.be.revertedWith("execution reverted") // FIXME: revert reason is not correct
+    // catch thrown exception
+    try {
+      await GasRevenuePrecompileContract.functions.register()
+    } catch (e) {
+      expect(e.message).to.be.equal("caller is not a smart contract")
+    }
   })
 
   it("should calculate gas revenue", async () => {
-    // already registered as precompiles holds the state
-    console.log("isRegistered ", (await gasRevenueContract.callStatic.isRegistered()))
+    // prebalance
+    const preBalance = await gasRevenueContract.callStatic.getBalance()
 
     const testTx = await gasRevenueContract.functions.test(10, {
       type: 0,
@@ -75,19 +83,15 @@ describe("ExampleGasRevenue", function () {
     const totalGasPaid = gasUsed.mul(ethers.BigNumber.from(1_000_000_000))
     const percentages = await gasRevenueContract.callStatic.getPercentages()
     const gasRevenue = totalGasPaid.mul(percentages[2]).div(PERCENTAGE_DENOMINATOR)
-    console.log(`Expected gas revenue: ${gasRevenue}`)
 
-    const balance = await gasRevenueContract.functions.getBalance()
-    console.log(`Actual gas revenue: ${balance.balance}`)
+    const balance = await gasRevenueContract.callStatic.getBalance()
 
     const precompileBalance = await ethers.provider.getBalance("0x0300000000000000000000000000000000000000")
-    console.log(`Precompile balance: ${precompileBalance}`)
 
-    expect(precompileBalance).to.be.equal(balance.balance)
+    expect(precompileBalance).to.be.equal(balance)
 
     // FIXME: error on gasRevenue calc.
-    expect(balance.balance).to.be.equal(gasRevenue)
-
+    expect(balance.sub(preBalance)).to.be.equal(gasRevenue)
   });
 
 
