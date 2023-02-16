@@ -361,19 +361,13 @@ func (st *StateTransition) TransitionDb() (*ExecutionResult, error) {
 	// FIXME: not sure what to do with this
 	st.refundGas(rules.IsSubnetEVM)
 
-	isRegistered := st.state.GetState(
-		precompile.GasRevenueAddress,
-		common.BytesToHash(append([]byte("isRegistered"), st.to().Bytes()...)),
-	).Big().Cmp(common.Big1) == 0
+	full := new(big.Int).Mul(new(big.Int).SetUint64(st.gasUsed()), st.gasPrice)
+
+	isRegistered := precompile.IsRegistered(st.state, st.to())
 
 	if !isRegistered {
-		// not registered
-		st.state.AddBalance(st.evm.Context.Coinbase, new(big.Int).Mul(new(big.Int).SetUint64(st.gasUsed()), st.gasPrice))
+		st.state.AddBalance(st.evm.Context.Coinbase, full)
 	} else {
-		// registered
-		full := new(big.Int).Mul(new(big.Int).SetUint64(st.gasUsed()), st.gasPrice)
-
-		// get blackhole percentage
 		blackholePercentage := precompile.GetPercentage(st.state, 0)
 		coinbasePercentage := precompile.GetPercentage(st.state, 1)
 		gasRevenuePercentage := precompile.GetPercentage(st.state, 2)
@@ -396,12 +390,8 @@ func (st *StateTransition) TransitionDb() (*ExecutionResult, error) {
 		// get pre-balance
 		balance := precompile.BalanceOf(st.state, st.to())
 
-		// record total gas revenue
-		st.state.SetState(
-			precompile.GasRevenueAddress,
-			common.BytesToHash(append([]byte("balanceOf"), st.to().Bytes()...)),
-			common.BigToHash(new(big.Int).Add(balance, gasRevenueAmount)),
-		)
+		// update gas revenue
+		precompile.SetBalanceOf(st.state, st.to(), new(big.Int).Add(balance, gasRevenueAmount))
 	}
 
 	return &ExecutionResult{
