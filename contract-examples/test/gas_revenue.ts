@@ -94,5 +94,29 @@ describe("ExampleGasRevenue", function () {
     expect(balance.sub(preBalance)).to.be.equal(gasRevenue)
   });
 
+  it("should withdraw", async () => {
+    const [signer1, signer2] = await ethers.getSigners()
 
-})
+    const preBalance = await gasRevenueContract.callStatic.getBalance()
+    expect(preBalance).to.be.gt(0)
+
+    const withdrawTx = await gasRevenueContract.functions.withdraw(signer2.address, {
+      type: 0,
+      gasPrice: 1_000_000_000,
+    })
+    const withdrawReceipt = await withdrawTx.wait()
+
+    const percentages = await gasRevenueContract.callStatic.getPercentages()
+
+    const recipientBalance = await ethers.provider.getBalance(signer2.address)
+    expect(recipientBalance).to.be.equal(preBalance)
+
+    // new balance should be the gas revenue of withdraw()
+    const newBalance = await gasRevenueContract.callStatic.getBalance()
+    expect(newBalance).to.be.equal(
+      withdrawReceipt.cumulativeGasUsed.mul(ethers.BigNumber.from(1_000_000_000))
+        .mul(percentages[2])
+        .div(PERCENTAGE_DENOMINATOR)
+    )
+  })
+});
