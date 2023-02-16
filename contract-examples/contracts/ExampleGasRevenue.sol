@@ -34,10 +34,6 @@ contract ExampleGasRevenue {
     gasRevenueContract = gasRevenue.getPercentage(IGasRevenue.Target.GasRevenueContract);
   }
 
-  function supportsInterface(bytes4 interfaceId) public pure returns (bool) {
-    return true;
-  }
-
   function test(uint256 n) public {
     // loop 10 times and return the sum
     uint256 _sum = 0;
