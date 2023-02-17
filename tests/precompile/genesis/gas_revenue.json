@@ -29,9 +29,11 @@
           "0x0Fa8EA536Be85F32724D57A37758761B86416123",
           "0x05F330F63c40e3ada2D33D88BA92f67284479F87"
         ],
-        "blackholePercentage": 500,
-        "coinbasePercentage": 250,
-        "gasRevenuePercentage": 250
+        "initialGasRevenueConfig": {
+          "blackholePercentage": 500,
+          "coinbasePercentage": 250,
+          "gasRevenuePercentage": 250
+        }
       }
     },
     "alloc": {

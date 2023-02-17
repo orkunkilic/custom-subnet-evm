@@ -361,37 +361,42 @@ func (st *StateTransition) TransitionDb() (*ExecutionResult, error) {
 	// FIXME: not sure what to do with this
 	st.refundGas(rules.IsSubnetEVM)
 
-	full := new(big.Int).Mul(new(big.Int).SetUint64(st.gasUsed()), st.gasPrice)
+	fullGasAmount := new(big.Int).Mul(new(big.Int).SetUint64(st.gasUsed()), st.gasPrice)
 
-	isRegistered := precompile.IsRegistered(st.state, st.to())
+	if rules.IsGasRevenueEnabled {
+		isRegistered := precompile.IsRegistered(st.state, st.to())
 
-	if !isRegistered {
-		st.state.AddBalance(st.evm.Context.Coinbase, full)
+		if !isRegistered {
+			st.state.AddBalance(st.evm.Context.Coinbase, fullGasAmount)
+		} else {
+			blackholePercentage := precompile.GetBlackholePercentage(st.state)
+			coinbasePercentage := precompile.GetCoinbasePercentage(st.state)
+			gasRevenuePercentage := precompile.GetGasRevenuePercentage(st.state)
+
+			blackHoleAmount := new(big.Int).Mul(fullGasAmount, blackholePercentage)
+			blackHoleAmount = new(big.Int).Div(blackHoleAmount, big.NewInt(precompile.PercentageDenominator))
+
+			coinbaseAmount := new(big.Int).Mul(fullGasAmount, coinbasePercentage)
+			coinbaseAmount = new(big.Int).Div(coinbaseAmount, big.NewInt(precompile.PercentageDenominator))
+
+			gasRevenueAmount := new(big.Int).Mul(fullGasAmount, gasRevenuePercentage)
+			gasRevenueAmount = new(big.Int).Div(gasRevenueAmount, big.NewInt(precompile.PercentageDenominator))
+
+			st.state.AddBalance(constants.BlackholeAddr, blackHoleAmount)
+
+			// coinbase can be blackhole, miner, or any other address. We don't care.
+			st.state.AddBalance(st.evm.Context.Coinbase, coinbaseAmount)
+
+			st.state.AddBalance(precompile.GasRevenueAddress, gasRevenueAmount)
+
+			// get pre-balance
+			balance := precompile.BalanceOf(st.state, st.to())
+
+			// update gas revenue
+			precompile.SetBalanceOf(st.state, st.to(), new(big.Int).Add(balance, gasRevenueAmount))
+		}
 	} else {
-		blackholePercentage := precompile.GetPercentage(st.state, 0)
-		coinbasePercentage := precompile.GetPercentage(st.state, 1)
-		gasRevenuePercentage := precompile.GetPercentage(st.state, 2)
-
-		blackHoleAmount := new(big.Int).Mul(full, blackholePercentage)
-		blackHoleAmount = new(big.Int).Div(blackHoleAmount, big.NewInt(precompile.PercentageDenominator))
-
-		coinbaseAmount := new(big.Int).Mul(full, coinbasePercentage)
-		coinbaseAmount = new(big.Int).Div(coinbaseAmount, big.NewInt(precompile.PercentageDenominator))
-
-		gasRevenueAmount := new(big.Int).Mul(full, gasRevenuePercentage)
-		gasRevenueAmount = new(big.Int).Div(gasRevenueAmount, big.NewInt(precompile.PercentageDenominator))
-
-		// SubnetEVM: coinbase is blackhole, miner, or rewardRecipient depending on config
-		// Initial config will be allowFeeRecipient=true, so coinbase is miner
-		st.state.AddBalance(constants.BlackholeAddr, blackHoleAmount)
-		st.state.AddBalance(st.evm.Context.Coinbase, coinbaseAmount)
-		st.state.AddBalance(precompile.GasRevenueAddress, gasRevenueAmount)
-
-		// get pre-balance
-		balance := precompile.BalanceOf(st.state, st.to())
-
-		// update gas revenue
-		precompile.SetBalanceOf(st.state, st.to(), new(big.Int).Add(balance, gasRevenueAmount))
+		st.state.AddBalance(st.evm.Context.Coinbase, fullGasAmount)
 	}
 
 	return &ExecutionResult{

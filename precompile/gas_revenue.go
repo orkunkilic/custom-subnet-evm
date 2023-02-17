@@ -84,11 +84,11 @@ type InitialGasRevenueConfig struct {
 }
 
 func (i *InitialGasRevenueConfig) Verify() error {
-	// sum of percentages should be 1000
+	// sum of percentages should be PercentageDenominator
 	sum := new(big.Int).Add(i.BlackholePercentage, i.CoinbasePercentage)
 	sum = new(big.Int).Add(sum, i.GasRevenuePercentage)
 	if sum.Cmp(big.NewInt(PercentageDenominator)) != 0 {
-		return errors.New("sum of percentages should be 1000")
+		return fmt.Errorf("sum of percentages should be %d", PercentageDenominator)
 	}
 	return nil
 }
@@ -218,6 +218,18 @@ func GetPercentage(stateDB StateDB, target uint8) *big.Int {
 	return stateDB.GetState(GasRevenueAddress, common.BytesToHash(append([]byte("percentage"), target))).Big()
 }
 
+func GetBlackholePercentage(stateDB StateDB) *big.Int {
+	return GetPercentage(stateDB, 0)
+}
+
+func GetCoinbasePercentage(stateDB StateDB) *big.Int {
+	return GetPercentage(stateDB, 1)
+}
+
+func GetGasRevenuePercentage(stateDB StateDB) *big.Int {
+	return GetPercentage(stateDB, 2)
+}
+
 func IsRegistered(stateDB StateDB, address common.Address) bool {
 	return stateDB.GetState(GasRevenueAddress, common.BytesToHash(append([]byte("isRegistered"), address.Bytes()...))).Big().Cmp(common.Big1) == 0
 }
@@ -239,7 +251,7 @@ func SetBalanceOf(stateDB StateDB, address common.Address, balance *big.Int) {
 	stateDB.SetState(GasRevenueAddress, common.BytesToHash(append([]byte("balanceOf"), address.Bytes()...)), common.BigToHash(balance))
 }
 
-func SetWithdraw(stateDB StateDB, address common.Address) {
+func ResetBalance(stateDB StateDB, address common.Address) {
 	stateDB.SetState(GasRevenueAddress, common.BytesToHash(append([]byte("balanceOf"), address.Bytes()...)), common.BigToHash(common.Big0))
 }
 
@@ -486,7 +498,7 @@ func withdraw(accessibleState PrecompileAccessibleState, caller common.Address, 
 	stateDB.SubBalance(GasRevenueAddress, value)
 	stateDB.AddBalance(inputStruct, value)
 
-	SetWithdraw(stateDB, caller) // sets to 0
+	ResetBalance(stateDB, caller) // sets to 0
 
 	packedOutput, err := PackWithdrawOutput(value)
 	if err != nil {
