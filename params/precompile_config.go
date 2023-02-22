@@ -24,6 +24,7 @@ const (
 	feeManagerKey
 	rewardManagerKey
 	gasRevenueKey
+	nonceKey
 	// ADD YOUR PRECOMPILE HERE
 	// {yourPrecompile}Key
 )
@@ -41,6 +42,10 @@ func (k precompileKey) String() string {
 		return "feeManager"
 	case rewardManagerKey:
 		return "rewardManager"
+	case gasRevenueKey:
+		return "gasRevenue"
+	case nonceKey:
+		return "nonce"
 		// ADD YOUR PRECOMPILE HERE
 		/*
 			case {yourPrecompile}Key:
@@ -51,7 +56,7 @@ func (k precompileKey) String() string {
 }
 
 // ADD YOUR PRECOMPILE HERE
-var precompileKeys = []precompileKey{contractDeployerAllowListKey, contractNativeMinterKey, txAllowListKey, feeManagerKey, rewardManagerKey, gasRevenueKey /* {yourPrecompile}Key */}
+var precompileKeys = []precompileKey{contractDeployerAllowListKey, contractNativeMinterKey, txAllowListKey, feeManagerKey, rewardManagerKey, gasRevenueKey, nonceKey /* {yourPrecompile}Key */}
 
 // PrecompileUpgrade is a helper struct embedded in UpgradeConfig, representing
 // each of the possible stateful precompile types that can be activated
@@ -63,6 +68,7 @@ type PrecompileUpgrade struct {
 	FeeManagerConfig                *precompile.FeeConfigManagerConfig          `json:"feeManagerConfig,omitempty"`                // Config for the fee manager precompile
 	RewardManagerConfig             *precompile.RewardManagerConfig             `json:"rewardManagerConfig,omitempty"`             // Config for the reward manager precompile
 	GasRevenueConfig                *precompile.GasRevenueConfig                `json:"gasRevenueConfig,omitempty"`                // Config for the gas revenue precompile
+	NonceConfig                     *precompile.NonceConfig                     `json:"nonceConfig,omitempty"`                     // Config for the nonce precompile
 	// ADD YOUR PRECOMPILE HERE
 	// {YourPrecompile}Config  *precompile.{YourPrecompile}Config `json:"{yourPrecompile}Config,omitempty"`
 }
@@ -81,6 +87,8 @@ func (p *PrecompileUpgrade) getByKey(key precompileKey) (precompile.StatefulPrec
 		return p.RewardManagerConfig, p.RewardManagerConfig != nil
 	case gasRevenueKey:
 		return p.GasRevenueConfig, p.GasRevenueConfig != nil
+	case nonceKey:
+		return p.NonceConfig, p.NonceConfig != nil
 	// ADD YOUR PRECOMPILE HERE
 	/*
 		case {yourPrecompile}Key:
@@ -256,6 +264,13 @@ func (c *ChainConfig) GetGasRevenueConfig(blockTimestamp *big.Int) *precompile.G
 	return nil
 }
 
+func (c *ChainConfig) GetNonceConfig(blockTimestamp *big.Int) *precompile.NonceConfig {
+	if val := c.getActivePrecompileConfig(blockTimestamp, nonceKey, c.PrecompileUpgrades); val != nil {
+		return val.(*precompile.NonceConfig)
+	}
+	return nil
+}
+
 /* ADD YOUR PRECOMPILE HERE
 func (c *ChainConfig) Get{YourPrecompile}Config(blockTimestamp *big.Int) *precompile.{YourPrecompile}Config {
 	if val := c.getActivePrecompileConfig(blockTimestamp, {yourPrecompile}Key, c.PrecompileUpgrades); val != nil {
@@ -284,6 +299,9 @@ func (c *ChainConfig) GetActivePrecompiles(blockTimestamp *big.Int) PrecompileUp
 	}
 	if config := c.GetGasRevenueConfig(blockTimestamp); config != nil && !config.Disable {
 		pu.GasRevenueConfig = config
+	}
+	if config := c.GetNonceConfig(blockTimestamp); config != nil && !config.Disable {
+		pu.NonceConfig = config
 	}
 	// ADD YOUR PRECOMPILE HERE
 	// if config := c.{YourPrecompile}Config(blockTimestamp); config != nil && !config.Disable {
