@@ -304,6 +304,16 @@ func (c *ChainConfig) IsRewardManager(blockTimestamp *big.Int) bool {
 	return config != nil && !config.Disable
 }
 
+func (c *ChainConfig) IsGasRevenue(blockTimestamp *big.Int) bool {
+	config := c.GetGasRevenueConfig(blockTimestamp)
+	return config != nil && !config.Disable
+}
+
+func (c *ChainConfig) IsNonce(blockTimestamp *big.Int) bool {
+	config := c.GetNonceConfig(blockTimestamp)
+	return config != nil && !config.Disable
+}
+
 // ADD YOUR PRECOMPILE HERE
 /*
 func (c *ChainConfig) Is{YourPrecompile}(blockTimestamp *big.Int) bool {
@@ -545,6 +555,8 @@ type Rules struct {
 	IsTxAllowListEnabled               bool
 	IsFeeConfigManagerEnabled          bool
 	IsRewardManagerEnabled             bool
+	IsGasRevenueEnabled                bool
+	IsNonceEnabled                     bool
 	// ADD YOUR PRECOMPILE HERE
 	// Is{YourPrecompile}Enabled         bool
 
@@ -585,8 +597,9 @@ func (c *ChainConfig) AvalancheRules(blockNum, blockTimestamp *big.Int) Rules {
 	rules.IsTxAllowListEnabled = c.IsTxAllowList(blockTimestamp)
 	rules.IsFeeConfigManagerEnabled = c.IsFeeConfigManager(blockTimestamp)
 	rules.IsRewardManagerEnabled = c.IsRewardManager(blockTimestamp)
+	rules.IsGasRevenueEnabled = c.IsGasRevenue(blockTimestamp)
+	rules.IsNonceEnabled = c.IsNonce(blockTimestamp)
 	// ADD YOUR PRECOMPILE HERE
-	// rules.Is{YourPrecompile}Enabled = c.{IsYourPrecompile}(blockTimestamp)
 
 	// Initialize the stateful precompiles that should be enabled at [blockTimestamp].
 	rules.Precompiles = make(map[common.Address]precompile.StatefulPrecompiledContract)

@@ -61,6 +61,20 @@ var _ = ginkgo.Describe("[Precompiles]", ginkgo.Ordered, func() {
 		utils.ExecuteHardHatTestOnNewBlockchain(ctx, "reward_manager")
 	})
 
+	ginkgo.It("gas revenue", ginkgo.Label("Precompile"), ginkgo.Label("GasRevenue"), func() {
+		ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
+		defer cancel()
+
+		utils.ExecuteHardHatTestOnNewBlockchain(ctx, "gas_revenue")
+	})
+
+	ginkgo.It("nonce", ginkgo.Label("Precompile"), ginkgo.Label("Nonce"), func() {
+		ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
+		defer cancel()
+
+		utils.ExecuteHardHatTestOnNewBlockchain(ctx, "nonce")
+	})
+
 	// TODO: can we refactor this so that it automagically checks to ensure each hardhat test file matches the name of a hardhat genesis file
 	// and then runs the hardhat tests for each one without forcing precompile developers to modify this file.
 	// ADD YOUR PRECOMPILE HERE

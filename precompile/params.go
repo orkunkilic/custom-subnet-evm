@@ -33,8 +33,9 @@ var (
 	TxAllowListAddress               = common.HexToAddress("0x0200000000000000000000000000000000000002")
 	FeeConfigManagerAddress          = common.HexToAddress("0x0200000000000000000000000000000000000003")
 	RewardManagerAddress             = common.HexToAddress("0x0200000000000000000000000000000000000004")
+	GasRevenueAddress                = common.HexToAddress("0x0300000000000000000000000000000000000000")
+	NonceAddress                     = common.HexToAddress("0x0300000000000000000000000000000000000001")
 	// ADD YOUR PRECOMPILE HERE
-	// {YourPrecompile}Address       = common.HexToAddress("0x03000000000000000000000000000000000000??")
 
 	UsedAddresses = []common.Address{
 		ContractDeployerAllowListAddress,
@@ -42,8 +43,9 @@ var (
 		TxAllowListAddress,
 		FeeConfigManagerAddress,
 		RewardManagerAddress,
+		GasRevenueAddress,
+		NonceAddress,
 		// ADD YOUR PRECOMPILE HERE
-		// YourPrecompileAddress
 	}
 	reservedRanges = []AddressRange{
 		{

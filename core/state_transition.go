@@ -33,6 +33,7 @@ import (
 
 	"github.com/ethereum/go-ethereum/crypto"
 
+	"github.com/ava-labs/subnet-evm/constants"
 	"github.com/ava-labs/subnet-evm/core/types"
 	"github.com/ava-labs/subnet-evm/core/vm"
 	"github.com/ava-labs/subnet-evm/params"
@@ -356,8 +357,47 @@ func (st *StateTransition) TransitionDb() (*ExecutionResult, error) {
 		st.state.SetNonce(msg.From(), st.state.GetNonce(sender.Address())+1)
 		ret, st.gas, vmerr = st.evm.Call(sender, st.to(), st.data, st.gas, st.value)
 	}
+
+	// FIXME: not sure what to do with this
 	st.refundGas(rules.IsSubnetEVM)
-	st.state.AddBalance(st.evm.Context.Coinbase, new(big.Int).Mul(new(big.Int).SetUint64(st.gasUsed()), st.gasPrice))
+
+	fullGasAmount := new(big.Int).Mul(new(big.Int).SetUint64(st.gasUsed()), st.gasPrice)
+
+	if rules.IsGasRevenueEnabled {
+		isRegistered := precompile.IsRegistered(st.state, st.to())
+
+		if !isRegistered {
+			st.state.AddBalance(st.evm.Context.Coinbase, fullGasAmount)
+		} else {
+			blackholePercentage := precompile.GetBlackholePercentage(st.state)
+			coinbasePercentage := precompile.GetCoinbasePercentage(st.state)
+			gasRevenuePercentage := precompile.GetGasRevenuePercentage(st.state)
+
+			blackHoleAmount := new(big.Int).Mul(fullGasAmount, blackholePercentage)
+			blackHoleAmount = new(big.Int).Div(blackHoleAmount, big.NewInt(precompile.PercentageDenominator))
+
+			coinbaseAmount := new(big.Int).Mul(fullGasAmount, coinbasePercentage)
+			coinbaseAmount = new(big.Int).Div(coinbaseAmount, big.NewInt(precompile.PercentageDenominator))
+
+			gasRevenueAmount := new(big.Int).Mul(fullGasAmount, gasRevenuePercentage)
+			gasRevenueAmount = new(big.Int).Div(gasRevenueAmount, big.NewInt(precompile.PercentageDenominator))
+
+			st.state.AddBalance(constants.BlackholeAddr, blackHoleAmount)
+
+			// coinbase can be blackhole, miner, or any other address. We don't care.
+			st.state.AddBalance(st.evm.Context.Coinbase, coinbaseAmount)
+
+			st.state.AddBalance(precompile.GasRevenueAddress, gasRevenueAmount)
+
+			// get pre-balance
+			balance := precompile.BalanceOf(st.state, st.to())
+
+			// update gas revenue
+			precompile.SetBalanceOf(st.state, st.to(), new(big.Int).Add(balance, gasRevenueAmount))
+		}
+	} else {
+		st.state.AddBalance(st.evm.Context.Coinbase, fullGasAmount)
+	}
 
 	return &ExecutionResult{
 		UsedGas:    st.gasUsed(),
